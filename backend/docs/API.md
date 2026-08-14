@@ -28,6 +28,7 @@ straight into Postman or Insomnia.
 - [Brands](#brands)
 - [Products](#products)
 - [Product MRP](#product-mrp)
+- [Targets](#targets)
 - [CSV imports](#csv-imports)
 - [Errors](#errors)
 
@@ -110,6 +111,7 @@ A permission slug is always `module:action`. Permissions belong to the **role**,
 | `brands`       | view, create, edit, delete |
 | `products`     | view, create, edit, delete, import |
 | `product_mrp`  | view, create, import |
+| `targets`      | view, create, edit, delete |
 | `imports`      | view |
 
 Built-in roles and their seeded access:
@@ -117,8 +119,8 @@ Built-in roles and their seeded access:
 | Role            | Access |
 |-----------------|--------|
 | `SUPER_ADMIN`   | Everything, always. |
-| `ADMIN`         | `users:view/create/edit`, plus everything on regions, distributors, brands, products, MRP and imports. |
-| `RSM`           | Regional Sales Manager. The `:view` action on regions, distributors, brands, products, MRP and imports. |
+| `ADMIN`         | `users:view/create/edit`, plus everything on regions, distributors, brands, products, MRP, targets and imports. |
+| `RSM`           | Regional Sales Manager. The `:view` action on regions, distributors, brands, products, MRP, targets and imports. |
 | `SO`            | Sales Officer. The same `:view` access as `RSM`. |
 
 `RSM` and `SO` also carry a **scope**, held on the user rather than on the role:
@@ -591,6 +593,122 @@ Returns 201 with the updated product. Refused when:
 
 The reporting lookup: the row whose date range covers `on_date`, or a 404 when the product had no
 price then.
+
+---
+
+## Targets
+
+A target is a monthly plan: a **name**, a **type** (region / distributor / sales person), the
+**value** chosen for that type, a **month and year**, and a table of **products with the number of
+units** expected for each.
+
+`search` covers the target name. Sortable: `id`, `name`, `target_type`, `target_month`,
+`target_year`, `status`, `created_at`. Default sort `created_at desc`. Extra filters:
+`target_type`, `target_ref_id`, `target_month`, `target_year`.
+
+| Method | Path | Permission |
+|--------|------|-----------|
+| GET    | `/targets` | `targets:view` |
+| GET    | `/targets/{id}` | `targets:view` |
+| POST   | `/targets` | `targets:create` |
+| PUT    | `/targets/{id}` | `targets:edit` |
+| DELETE | `/targets/{id}` | `targets:delete` |
+| GET    | `/targets/types` | `targets:view` |
+| GET    | `/targets/options?type=…` | `targets:view` |
+
+### Filling the two drop-downs
+
+`GET /targets/types` is the first one — a fixed list:
+
+```json
+[
+  { "value": "region",       "label": "Region" },
+  { "value": "distributor",  "label": "Distributors" },
+  { "value": "sales_person", "label": "Sales Person" }
+]
+```
+
+`GET /targets/options?type=region` is the second — the values that can be chosen once a type is
+picked. Only rows that could actually carry a target come back: active regions, active distributors,
+active users on a sales role (`RSM`, `SO`, or the retired `SALES_PERSON`). Capped at 500 rows;
+narrow it with `&search=`. The shape follows the type — a region is `{ id, name }`, a distributor
+adds `code`, a sales person adds `email`, `role_name` and `region_name`:
+
+```json
+[{ "id": 8, "name": "Ravi Kumar", "email": "ravi@taktak.com", "role_name": "RSM", "region_name": "South" }]
+```
+
+The product table itself is the ordinary `GET /products` list — send back one row per product the
+user typed a number into.
+
+### `POST /targets`  *(`targets:create`)*
+
+```json
+{
+  "name": "South April push",
+  "target_type": "region",
+  "target_ref_id": 2,
+  "target_month": 4,
+  "target_year": 2026,
+  "status": "active",
+  "products": [
+    { "product_id": 1, "target_units": 500 },
+    { "product_id": 2, "target_units": 250 }
+  ]
+}
+```
+
+Rules:
+
+- `target_ref_id` is read against whichever table `target_type` names, so the pair must be sent
+  together. The chosen record must exist and be active; for `sales_person` it must also sit on a
+  sales role (400 otherwise).
+- `target_month` is 1–12, `target_year` 2000–2100.
+- At least one product row. Each product must exist and be active, may appear only once (422), and
+  `target_units` is a whole number of 0 or more — zero is allowed, so a product can sit in the table
+  with no target on it.
+- **One active target per owner per month.** A second one is a 409 naming the target already there.
+  A *deactivated* target does not reserve its month, so a period can always be planned again.
+
+### Target record
+
+```json
+{
+  "id": 1,
+  "name": "South April push",
+  "target_type": "region",
+  "type_label": "Region",
+  "target_ref_id": 2,
+  "target": { "id": 2, "type": "region", "name": "South", "status": "active" },
+  "target_month": 4,
+  "target_year": 2026,
+  "period": "2026-04",
+  "status": "active",
+  "product_count": 2,
+  "total_units": 750,
+  "products": [
+    {
+      "id": 1, "product_id": 1, "sku": "SKU-001", "product_name": "Acme Widget 500g",
+      "product_status": "active", "brand_id": 1, "brand_name": "Acme", "target_units": 500
+    }
+  ]
+}
+```
+
+`target` is the owner resolved back out of its own table — `null` if that record has since been
+removed, because the target itself is still a real record. List rows carry everything above **except
+`products`**; fetch one target to get the table.
+
+### `PUT /targets/{id}`  *(`targets:edit`)*
+
+Partial, like every other update. Sending `products` **replaces the whole table**; leaving it out
+keeps the rows as they are. Changing the type, the value, the month or the year re-runs the
+one-active-target-per-month check against the combination as it will end up.
+
+### `DELETE /targets/{id}`  *(`targets:delete`)*
+
+Soft, as everywhere else: `status` flips to `inactive` and the product rows are kept, so the target
+can still be read back and reported on — and the month is freed for a replacement.
 
 ---
 

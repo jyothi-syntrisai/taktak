@@ -109,6 +109,7 @@ app/
     RoleService        permission assignment, built-in role protection
     RegionService, DistributorService, BrandService, ProductService
     MrpService         the dated price-history rules
+    TargetService      monthly unit targets, and the drop-downs behind them
     ImportService      CSV -> staging -> validate -> promote
     PermissionService  role -> permission slugs
   Models/              one per table, thin query helpers

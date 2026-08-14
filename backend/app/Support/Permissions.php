@@ -39,6 +39,16 @@ final class Permissions
         self::ROLE_SO  => self::SCOPE_STATE,
     ];
 
+    /**
+     * Roles whose users can carry a sales target of their own - the "Sales
+     * Person" drop-down on the target screen lists exactly these. The retired
+     * SALES_PERSON role is included because users still sitting on it are meant
+     * to keep working until they are moved to RSM or SO.
+     *
+     * @var list<string>
+     */
+    public const SALES_ROLES = [self::ROLE_RSM, self::ROLE_SO, 'SALES_PERSON'];
+
     /** @var array<string, list<string>> */
     public const MODULE_ACTIONS = [
         'users'        => ['view', 'create', 'edit', 'delete'],
@@ -48,6 +58,7 @@ final class Permissions
         'brands'       => ['view', 'create', 'edit', 'delete'],
         'products'     => ['view', 'create', 'edit', 'delete', 'import'],
         'product_mrp'  => ['view', 'create', 'import'],
+        'targets'      => ['view', 'create', 'edit', 'delete'],
         'imports'      => ['view'],
     ];
 
@@ -70,6 +81,7 @@ final class Permissions
         'brands'       => 'Brands',
         'products'     => 'Products',
         'product_mrp'  => 'Product MRP',
+        'targets'      => 'Targets',
         'imports'      => 'CSV Imports',
     ];
 
@@ -144,6 +156,7 @@ final class Permissions
             'brands:view',
             'products:view',
             'product_mrp:view',
+            'targets:view',
             'imports:view',
         ];
 
@@ -157,6 +170,7 @@ final class Permissions
                 self::expand('brands'),
                 self::expand('products'),
                 self::expand('product_mrp'),
+                self::expand('targets'),
                 self::expand('imports'),
             ),
 

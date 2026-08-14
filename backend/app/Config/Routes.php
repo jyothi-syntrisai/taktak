@@ -116,6 +116,20 @@ $routes->group($apiPrefix, static function (RouteCollection $routes): void {
         $routes->get('(:num)/mrp/on-date', 'Products::mrpOnDate/$1', ['filter' => 'permission:product_mrp,view']);
     });
 
+    // --- targets -----------------------------------------------------------
+    $routes->group('targets', ['filter' => 'auth'], static function (RouteCollection $routes): void {
+        // Declared before (:num) so "types" and "options" are never read as ids.
+        // Both feed the two drop-downs at the top of the target screen.
+        $routes->get('types', 'Targets::types', ['filter' => 'permission:targets,view']);
+        $routes->get('options', 'Targets::options', ['filter' => 'permission:targets,view']);
+
+        $routes->get('/', 'Targets::index', ['filter' => 'permission:targets,view']);
+        $routes->get('(:num)', 'Targets::show/$1', ['filter' => 'permission:targets,view']);
+        $routes->post('/', 'Targets::create', ['filter' => 'permission:targets,create']);
+        $routes->put('(:num)', 'Targets::update/$1', ['filter' => 'permission:targets,edit']);
+        $routes->delete('(:num)', 'Targets::delete/$1', ['filter' => 'permission:targets,delete']);
+    });
+
     // --- CSV imports -------------------------------------------------------
     $routes->group('imports', ['filter' => 'auth'], static function (RouteCollection $routes): void {
         $routes->get('template', 'Imports::template', ['filter' => 'permission:imports,view']);

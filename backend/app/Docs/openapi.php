@@ -156,6 +156,7 @@ return [
         ['name' => 'Distributors', 'description' => 'Distributors and the regions they cover'],
         ['name' => 'Brands', 'description' => 'Product brands'],
         ['name' => 'Products', 'description' => 'Catalogue and dated MRP history'],
+        ['name' => 'Targets', 'description' => 'Monthly unit targets per region, distributor or sales person'],
         ['name' => 'Imports', 'description' => 'CSV imports and their staged rows'],
     ],
     'security' => [['bearerAuth' => []]],
@@ -633,6 +634,80 @@ return [
                     'schema'   => ['type' => 'string', 'format' => 'date', 'example' => '2026-02-15'],
                 ]],
                 'responses' => ['200' => $okResponse('The price row.', $ref('ProductMrp'))] + $errorResponses,
+            ],
+        ],
+
+        // ------------------------------------------------------------- targets
+        '/targets' => [
+            'get' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'List targets',
+                'description' => "Requires `targets:view`. `search` covers the target name. Each row carries the resolved owner plus `product_count` and `total_units`; the product rows themselves come back from `GET /targets/{id}`.\n\nSortable: id, name, target_type, target_month, target_year, status, created_at.",
+                'parameters'  => array_merge($listParams, [
+                    $queryParam('target_type', 'Only targets of this type.', 'string', ['enum' => ['region', 'distributor', 'sales_person']]),
+                    $queryParam('target_ref_id', 'Only targets belonging to this region / distributor / user. Pair it with `target_type` - ids are not unique across the three.', 'integer'),
+                    $queryParam('target_month', 'Month, 1-12.', 'integer'),
+                    $queryParam('target_year', 'Four-digit year.', 'integer'),
+                ]),
+                'responses' => ['200' => $pagedResponse('A page of targets.', $ref('Target'))] + $errorResponses,
+            ],
+            'post' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'Create a target',
+                'description' => "Requires `targets:create`.\n\nThe owner must exist and be active, and for `sales_person` must sit on a sales role (`RSM`, `SO`, `SALES_PERSON`). Every product must exist and be active, and may appear only once. One **active** target is allowed per owner per month - a second one is a 409, while a deactivated target steps aside so the period can be planned again.",
+                'requestBody' => $jsonBody($ref('TargetCreate')),
+                'responses'   => ['201' => $okResponse('Target created.', $ref('TargetDetail'))] + $errorResponses,
+            ],
+        ],
+        '/targets/types' => [
+            'get' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'The target type drop-down',
+                'description' => 'Requires `targets:view`. The fixed list behind the first drop-down on the target screen.',
+                'responses'   => [
+                    '200' => $okResponse('The types.', ['type' => 'array', 'items' => $ref('TargetType')]),
+                ] + $errorResponses,
+            ],
+        ],
+        '/targets/options' => [
+            'get' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'The value drop-down for a target type',
+                'description' => "Requires `targets:view`. The second drop-down: what can be chosen once a type is picked. Only rows that could carry a target are returned - active regions, active distributors, active users on a sales role. Capped at 500 rows; narrow it with `search`.\n\nThe shape follows the type: a region is `{ id, name }`, a distributor adds `code`, a sales person adds `email`, `role_name` and `region_name`.",
+                'parameters'  => [
+                    [
+                        'name'     => 'type',
+                        'in'       => 'query',
+                        'required' => true,
+                        'schema'   => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    ],
+                    $queryParam('search', 'Matches the name.'),
+                ],
+                'responses' => [
+                    '200' => $okResponse('The values for that type.', ['type' => 'array', 'items' => $ref('TargetOption')]),
+                ] + $errorResponses,
+            ],
+        ],
+        '/targets/{id}' => [
+            'parameters' => [$idParam],
+            'get'        => [
+                'tags'        => ['Targets'],
+                'summary'     => 'Fetch one target with its product rows',
+                'description' => 'Requires `targets:view`.',
+                'responses'   => ['200' => $okResponse('The target.', $ref('TargetDetail'))] + $errorResponses,
+            ],
+            'put' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'Update a target',
+                'description' => 'Requires `targets:edit`. Sending `products` replaces the whole table of product rows; leaving it out keeps them as they are.',
+                'requestBody' => $jsonBody($ref('TargetUpdate')),
+                'responses'   => ['200' => $okResponse('Target updated.', $ref('TargetDetail'))] + $errorResponses,
+            ],
+            'delete' => [
+                'tags'        => ['Targets'],
+                'summary'     => 'Deactivate a target (soft delete)',
+                'description' => 'Requires `targets:delete`. The product rows are kept, so the target can still be read back and reported on, and the month is freed for a new target.',
+                'responses'   => ['200' => $okResponse('Target deactivated.', $ref('TargetDetail'))] + $errorResponses,
             ],
         ],
 
@@ -1165,6 +1240,123 @@ return [
                     'brand_name'     => ['type' => 'string'],
                     'mrp'            => ['type' => 'number', 'format' => 'double', 'nullable' => true],
                     'effective_from' => ['type' => 'string', 'format' => 'date', 'nullable' => true],
+                ],
+            ],
+
+            'TargetType' => [
+                'type'       => 'object',
+                'properties' => [
+                    'value' => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    'label' => ['type' => 'string', 'example' => 'Sales Person'],
+                ],
+            ],
+
+            'TargetOption' => [
+                'type'        => 'object',
+                'description' => 'One value drop-down row. `id` and `name` are always present; the rest depend on the type.',
+                'properties'  => [
+                    'id'          => ['type' => 'integer'],
+                    'name'        => ['type' => 'string'],
+                    'code'        => ['type' => 'string', 'nullable' => true, 'description' => 'Distributors only.'],
+                    'email'       => ['type' => 'string', 'description' => 'Sales people only.'],
+                    'role_name'   => ['type' => 'string', 'description' => 'Sales people only.'],
+                    'region_name' => ['type' => 'string', 'nullable' => true, 'description' => 'Sales people only.'],
+                ],
+            ],
+
+            'TargetOwner' => [
+                'type'        => 'object',
+                'nullable'    => true,
+                'description' => 'The region, distributor or user behind `target_ref_id`, resolved. Null if that record has since been removed - the target itself is still a real record.',
+                'properties'  => [
+                    'id'        => ['type' => 'integer'],
+                    'type'      => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    'name'      => ['type' => 'string'],
+                    'status'    => $statusField,
+                    'code'      => ['type' => 'string', 'nullable' => true, 'description' => 'Distributors only.'],
+                    'email'     => ['type' => 'string', 'description' => 'Sales people only.'],
+                    'role_name' => ['type' => 'string', 'description' => 'Sales people only.'],
+                ],
+            ],
+
+            'TargetLine' => [
+                'type'       => 'object',
+                'properties' => [
+                    'id'             => ['type' => 'integer', 'description' => 'Id of the target row itself, not of the product.'],
+                    'product_id'     => ['type' => 'integer'],
+                    'sku'            => ['type' => 'string'],
+                    'product_name'   => ['type' => 'string'],
+                    'product_status' => $statusField,
+                    'brand_id'       => ['type' => 'integer', 'nullable' => true],
+                    'brand_name'     => ['type' => 'string', 'nullable' => true],
+                    'target_units'   => ['type' => 'integer', 'example' => 500],
+                ],
+            ],
+
+            'Target' => [
+                'type'       => 'object',
+                'properties' => array_merge([
+                    'id'            => ['type' => 'integer'],
+                    'name'          => ['type' => 'string', 'example' => 'South April push'],
+                    'target_type'   => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    'type_label'    => ['type' => 'string', 'example' => 'Region'],
+                    'target_ref_id' => ['type' => 'integer', 'description' => 'Id inside the table `target_type` names.'],
+                    'target'        => $ref('TargetOwner'),
+                    'target_month'  => ['type' => 'integer', 'minimum' => 1, 'maximum' => 12],
+                    'target_year'   => ['type' => 'integer', 'example' => 2026],
+                    'period'        => ['type' => 'string', 'example' => '2026-04', 'description' => 'Year and month together, for display and sorting.'],
+                    'status'        => $statusField,
+                    'product_count' => ['type' => 'integer'],
+                    'total_units'   => ['type' => 'integer'],
+                ], $auditFields),
+            ],
+
+            'TargetDetail' => [
+                'allOf' => [
+                    $ref('Target'),
+                    [
+                        'type'       => 'object',
+                        'properties' => [
+                            'products' => ['type' => 'array', 'items' => $ref('TargetLine'), 'description' => 'The product table, by brand then product name.'],
+                        ],
+                    ],
+                ],
+            ],
+
+            'TargetProductInput' => [
+                'type'     => 'object',
+                'required' => ['product_id', 'target_units'],
+                'properties' => [
+                    'product_id'   => ['type' => 'integer', 'minimum' => 1],
+                    'target_units' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 999999999, 'description' => 'Zero is allowed - a product may sit in the table with no target on it.'],
+                ],
+            ],
+
+            'TargetCreate' => [
+                'type'     => 'object',
+                'required' => ['name', 'target_type', 'target_ref_id', 'target_month', 'target_year', 'products'],
+                'properties' => [
+                    'name'          => ['type' => 'string', 'minLength' => 2, 'maxLength' => 200],
+                    'target_type'   => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    'target_ref_id' => ['type' => 'integer', 'description' => 'The value chosen in the second drop-down.'],
+                    'target_month'  => ['type' => 'integer', 'minimum' => 1, 'maximum' => 12],
+                    'target_year'   => ['type' => 'integer', 'minimum' => 2000, 'maximum' => 2100],
+                    'status'        => array_merge($statusField, ['default' => 'active']),
+                    'products'      => ['type' => 'array', 'minItems' => 1, 'items' => $ref('TargetProductInput')],
+                ],
+            ],
+
+            'TargetUpdate' => [
+                'type'          => 'object',
+                'minProperties' => 1,
+                'properties'    => [
+                    'name'          => ['type' => 'string', 'minLength' => 2, 'maxLength' => 200],
+                    'target_type'   => ['type' => 'string', 'enum' => ['region', 'distributor', 'sales_person']],
+                    'target_ref_id' => ['type' => 'integer'],
+                    'target_month'  => ['type' => 'integer', 'minimum' => 1, 'maximum' => 12],
+                    'target_year'   => ['type' => 'integer', 'minimum' => 2000, 'maximum' => 2100],
+                    'status'        => $statusField,
+                    'products'      => ['type' => 'array', 'minItems' => 1, 'items' => $ref('TargetProductInput'), 'description' => 'Replaces the whole table.'],
                 ],
             ],
 

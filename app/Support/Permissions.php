@@ -13,13 +13,30 @@ final class Permissions
 {
     public const ROLE_SUPER_ADMIN = 'SUPER_ADMIN';
     public const ROLE_ADMIN       = 'ADMIN';
-    public const ROLE_SALES_PERSON = 'SALES_PERSON';
+    public const ROLE_RSM         = 'RSM';
+    public const ROLE_SO          = 'SO';
 
     /** @var list<array{name: string, description: string}> */
     public const SYSTEM_ROLES = [
         ['name' => self::ROLE_SUPER_ADMIN, 'description' => 'Full access to everything, including roles and permissions'],
         ['name' => self::ROLE_ADMIN, 'description' => 'Manages masters, products and imports'],
-        ['name' => self::ROLE_SALES_PERSON, 'description' => 'Read-only access to masters and products'],
+        ['name' => self::ROLE_RSM, 'description' => 'Regional Sales Manager - works within one region'],
+        ['name' => self::ROLE_SO, 'description' => 'Sales Officer - works within one state of one region'],
+    ];
+
+    /**
+     * How far a user on a role reaches. A user is scoped by the role they sit
+     * on: an RSM belongs to a region, an SO to one state inside that region, and
+     * everybody else is unscoped.
+     */
+    public const SCOPE_NONE   = 'none';
+    public const SCOPE_REGION = 'region';
+    public const SCOPE_STATE  = 'state';
+
+    /** @var array<string, string> role name => scope */
+    private const ROLE_SCOPES = [
+        self::ROLE_RSM => self::SCOPE_REGION,
+        self::ROLE_SO  => self::SCOPE_STATE,
     ];
 
     /** @var array<string, list<string>> */
@@ -88,14 +105,48 @@ final class Permissions
     }
 
     /**
-     * Starting access for the three built-in roles, straight out of the
-     * "Default Access For Each Role" table in the schema document. This is only
-     * the seed state - it can be changed from the admin screen afterwards.
+     * The scope a role carries. Anything not listed - including roles an
+     * administrator adds later - is unscoped.
+     */
+    public static function scopeFor(string $roleName): string
+    {
+        return self::ROLE_SCOPES[$roleName] ?? self::SCOPE_NONE;
+    }
+
+    /** True when a user on this role must be given a region. */
+    public static function requiresRegion(string $roleName): bool
+    {
+        return self::scopeFor($roleName) !== self::SCOPE_NONE;
+    }
+
+    /** True when a user on this role must be given a state as well as a region. */
+    public static function requiresState(string $roleName): bool
+    {
+        return self::scopeFor($roleName) === self::SCOPE_STATE;
+    }
+
+    /**
+     * Starting access for the built-in roles, straight out of the "Default
+     * Access For Each Role" table in the schema document. This is only the seed
+     * state - it can be changed from the admin screen afterwards.
+     *
+     * The older SALES_PERSON role is no longer seeded. Any row that already
+     * exists is left exactly as it is, so users still sitting on it keep working
+     * until they are moved to RSM or SO.
      *
      * @return array<string, list<string>>
      */
     public static function defaultRolePermissions(): array
     {
+        $readOnly = [
+            'regions:view',
+            'distributors:view',
+            'brands:view',
+            'products:view',
+            'product_mrp:view',
+            'imports:view',
+        ];
+
         return [
             self::ROLE_SUPER_ADMIN => self::slugs(),
 
@@ -109,14 +160,9 @@ final class Permissions
                 self::expand('imports'),
             ),
 
-            self::ROLE_SALES_PERSON => [
-                'regions:view',
-                'distributors:view',
-                'brands:view',
-                'products:view',
-                'product_mrp:view',
-                'imports:view',
-            ],
+            self::ROLE_RSM => $readOnly,
+
+            self::ROLE_SO => $readOnly,
         ];
     }
 

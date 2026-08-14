@@ -102,6 +102,15 @@ $auditFields = [
 
 $statusField = ['type' => 'string', 'enum' => ['active', 'inactive']];
 
+/** Repeated on every endpoint that accepts `role_id` together with `region_id` / `state_id`. */
+$roleScopeNote = <<<'TEXT'
+    The role decides which of `region_id` and `state_id` apply:
+
+    * `RSM` - `region_id` is required, `state_id` is refused.
+    * `SO` - `region_id` and `state_id` are both required, and the state must be one of the states mapped to that region.
+    * every other role, `ADMIN` included - both are refused.
+    TEXT;
+
 // --- document ----------------------------------------------------------------
 
 return [
@@ -269,13 +278,15 @@ return [
                 'description' => "Requires `users:view`. `search` covers full name and email.\n\nSortable: id, full_name, email, status, created_at, last_login_at.",
                 'parameters'  => array_merge($listParams, [
                     $queryParam('role_id', 'Only users on this role.', 'integer'),
+                    $queryParam('region_id', 'Only users tied to this region.', 'integer'),
+                    $queryParam('state_id', 'Only users tied to this state.', 'integer'),
                 ]),
                 'responses' => ['200' => $pagedResponse('A page of users.', $ref('User'))] + $errorResponses,
             ],
             'post' => [
                 'tags'        => ['Users'],
                 'summary'     => 'Create a user',
-                'description' => 'Requires `users:create`.',
+                'description' => "Requires `users:create`.\n\n" . $roleScopeNote,
                 'requestBody' => $jsonBody($ref('UserCreate')),
                 'responses'   => ['201' => $okResponse('User created.', $ref('User'))] + $errorResponses,
             ],
@@ -291,7 +302,9 @@ return [
             'put' => [
                 'tags'        => ['Users'],
                 'summary'     => 'Update a user',
-                'description' => "Requires `users:edit`. Send only the fields you are changing.\n\nChanging the role or deactivating the account ends that user's sessions. The last active Super Admin cannot be moved or deactivated.",
+                'description' => "Requires `users:edit`. Send only the fields you are changing.\n\nChanging the role or deactivating the account ends that user's sessions. The last active Super Admin cannot be moved or deactivated.\n\n"
+                    . $roleScopeNote
+                    . "\n\nMoving a user onto a role that reaches less far clears whatever no longer applies: an RSM moved to ADMIN loses its region, an SO moved to RSM its state.",
                 'requestBody' => $jsonBody($ref('UserUpdate')),
                 'responses'   => ['200' => $okResponse('User updated.', $ref('User'))] + $errorResponses,
             ],
@@ -820,6 +833,27 @@ return [
                 ],
             ],
 
+            'RegionSummary' => [
+                'type'       => 'object',
+                'nullable'   => true,
+                'description' => 'Set only for a user on a region-scoped role (RSM, SO).',
+                'properties' => [
+                    'id'   => ['type' => 'integer'],
+                    'name' => ['type' => 'string', 'example' => 'South'],
+                ],
+            ],
+
+            'StateSummary' => [
+                'type'       => 'object',
+                'nullable'   => true,
+                'description' => 'Set only for a user on a state-scoped role (SO).',
+                'properties' => [
+                    'id'   => ['type' => 'integer'],
+                    'name' => ['type' => 'string', 'example' => 'Karnataka'],
+                    'code' => ['type' => 'string', 'nullable' => true, 'example' => 'KA'],
+                ],
+            ],
+
             'User' => [
                 'type'       => 'object',
                 'properties' => array_merge([
@@ -828,6 +862,10 @@ return [
                     'email'         => ['type' => 'string', 'format' => 'email'],
                     'role_id'       => ['type' => 'integer'],
                     'role'          => $ref('RoleSummary'),
+                    'region_id'     => ['type' => 'integer', 'nullable' => true],
+                    'region'        => $ref('RegionSummary'),
+                    'state_id'      => ['type' => 'integer', 'nullable' => true],
+                    'state'         => $ref('StateSummary'),
                     'status'        => $statusField,
                     'last_login_at' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
                 ], $auditFields),
@@ -841,6 +879,8 @@ return [
                     'email'     => ['type' => 'string', 'format' => 'email'],
                     'password'  => ['type' => 'string', 'format' => 'password', 'minLength' => 8, 'description' => 'At least 8 characters, with a letter and a number.'],
                     'role_id'   => ['type' => 'integer'],
+                    'region_id' => ['type' => 'integer', 'nullable' => true, 'description' => 'Required for RSM and SO, refused for any other role.'],
+                    'state_id'  => ['type' => 'integer', 'nullable' => true, 'description' => 'Required for SO, refused for any other role. Must be a state of `region_id`.'],
                     'status'    => array_merge($statusField, ['default' => 'active']),
                 ],
             ],
@@ -852,6 +892,8 @@ return [
                     'full_name' => ['type' => 'string', 'minLength' => 2, 'maxLength' => 150],
                     'email'     => ['type' => 'string', 'format' => 'email'],
                     'role_id'   => ['type' => 'integer'],
+                    'region_id' => ['type' => 'integer', 'nullable' => true, 'description' => 'Follows the same rule as on create, against the role the user ends up on.'],
+                    'state_id'  => ['type' => 'integer', 'nullable' => true, 'description' => 'Follows the same rule as on create, against the role the user ends up on.'],
                     'status'    => $statusField,
                 ],
             ],

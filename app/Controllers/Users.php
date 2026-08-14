@@ -44,6 +44,11 @@ class Users extends BaseApiController
                 'email'     => ['required', 'valid_email', 'max_length[255]'],
                 'password'  => self::PASSWORD_RULES,
                 'role_id'   => ['required', 'is_natural_no_zero'],
+                // Required or refused depending on the role - an RSM needs a
+                // region, an SO a region and a state, anyone else neither. The
+                // service settles that once it knows which role was picked.
+                'region_id' => ['permit_empty', 'is_natural_no_zero'],
+                'state_id'  => ['permit_empty', 'is_natural_no_zero'],
                 'status'    => ['permit_empty', 'in_list[active,inactive]'],
             ],
             [
@@ -51,6 +56,8 @@ class Users extends BaseApiController
                 'email'     => ['required' => 'A valid email address is required', 'valid_email' => 'A valid email address is required'],
                 'password'  => self::PASSWORD_MESSAGES,
                 'role_id'   => ['required' => 'A role must be selected', 'is_natural_no_zero' => 'A role must be selected'],
+                'region_id' => ['is_natural_no_zero' => 'A valid region must be selected'],
+                'state_id'  => ['is_natural_no_zero' => 'A valid state must be selected'],
             ],
         );
 
@@ -59,14 +66,22 @@ class Users extends BaseApiController
 
     public function update(string $id): ResponseInterface
     {
-        $input = $this->validateBody([
-            'full_name' => ['permit_empty', 'min_length[2]', 'max_length[150]'],
-            'email'     => ['permit_empty', 'valid_email', 'max_length[255]'],
-            'role_id'   => ['permit_empty', 'is_natural_no_zero'],
-            'status'    => ['permit_empty', 'in_list[active,inactive]'],
-        ]);
+        $input = $this->validateBody(
+            [
+                'full_name' => ['permit_empty', 'min_length[2]', 'max_length[150]'],
+                'email'     => ['permit_empty', 'valid_email', 'max_length[255]'],
+                'role_id'   => ['permit_empty', 'is_natural_no_zero'],
+                'region_id' => ['permit_empty', 'is_natural_no_zero'],
+                'state_id'  => ['permit_empty', 'is_natural_no_zero'],
+                'status'    => ['permit_empty', 'in_list[active,inactive]'],
+            ],
+            [
+                'region_id' => ['is_natural_no_zero' => 'A valid region must be selected'],
+                'state_id'  => ['is_natural_no_zero' => 'A valid state must be selected'],
+            ],
+        );
 
-        $this->requireAnyOf($input, ['full_name', 'email', 'role_id', 'status']);
+        $this->requireAnyOf($input, ['full_name', 'email', 'role_id', 'region_id', 'state_id', 'status']);
 
         return $this->ok(
             $this->service->update($this->routeId($id), $input, $this->actorId()),

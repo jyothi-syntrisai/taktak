@@ -118,7 +118,19 @@ Built-in roles and their seeded access:
 |-----------------|--------|
 | `SUPER_ADMIN`   | Everything, always. |
 | `ADMIN`         | `users:view/create/edit`, plus everything on regions, distributors, brands, products, MRP and imports. |
-| `SALES_PERSON`  | The `:view` action on regions, distributors, brands, products, MRP and imports. |
+| `RSM`           | Regional Sales Manager. The `:view` action on regions, distributors, brands, products, MRP and imports. |
+| `SO`            | Sales Officer. The same `:view` access as `RSM`. |
+
+`RSM` and `SO` also carry a **scope**, held on the user rather than on the role:
+
+| Role   | `region_id` | `state_id` |
+|--------|-------------|------------|
+| `RSM`  | required    | refused |
+| `SO`   | required    | required, and must be a state of that region |
+| others | refused     | refused |
+
+The older `SALES_PERSON` role is no longer seeded. Rows that already exist are left untouched, so
+users still on it keep working until they are moved to `RSM` or `SO`.
 
 States carry no permission module — reference data is readable by any signed-in user, because the
 region screen needs the dropdown.
@@ -221,9 +233,9 @@ one. Every other session is ended.
 | PATCH  | `/users/{id}/reset-password` | `users:edit` |
 | DELETE | `/users/{id}` | `users:delete` |
 
-Extra filter: `role_id`.
+Extra filters: `role_id`, `region_id`, `state_id`.
 
-**Create**
+**Create** — an `ADMIN`, who is tied to neither a region nor a state:
 
 ```json
 {
@@ -232,6 +244,19 @@ Extra filter: `role_id`.
   "password": "Welcome2026",
   "role_id": 2,
   "status": "active"
+}
+```
+
+An `RSM` adds `region_id`, and an `SO` adds `region_id` and `state_id`:
+
+```json
+{
+  "full_name": "Vikram Nair",
+  "email": "vikram@taktak.com",
+  "password": "Welcome2026",
+  "role_id": 4,
+  "region_id": 1,
+  "state_id": 12
 }
 ```
 
@@ -244,6 +269,10 @@ Extra filter: `role_id`.
   "email": "asha@taktak.com",
   "role_id": 2,
   "role": { "id": 2, "name": "ADMIN", "description": "Manages masters, products and imports" },
+  "region_id": null,
+  "region": null,
+  "state_id": null,
+  "state": null,
   "status": "active",
   "last_login_at": null,
   "created_at": "2026-08-14 05:20:11",
@@ -253,11 +282,28 @@ Extra filter: `role_id`.
 }
 ```
 
+For an `SO` the last four carry the scope:
+
+```json
+{
+  "region_id": 1,
+  "region": { "id": 1, "name": "South" },
+  "state_id": 12,
+  "state": { "id": 12, "name": "Karnataka", "code": "KA" }
+}
+```
+
 `password_hash` is never returned by any endpoint.
 
 **Rules worth knowing**
 
 - Changing `role_id`, or deactivating the account, revokes that user's tokens immediately.
+- `region_id` / `state_id` are checked against the role the user ends up on, so send the new
+  `role_id` and the new scope in the same request. Moving a user to a role that reaches less far
+  clears what no longer applies — an `RSM` moved to `ADMIN` loses its region, an `SO` moved to `RSM`
+  its state — but sending a region or state a role has no use for is refused with a 400.
+- An update that touches neither `role_id`, `region_id` nor `state_id` leaves the scope alone.
+- The region must be active, and for an `SO` the state must be active and mapped to that region.
 - You cannot deactivate your own account.
 - The last active `SUPER_ADMIN` cannot be deactivated or moved to another role — that would lock
   everyone out of the roles screen.

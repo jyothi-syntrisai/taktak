@@ -1,0 +1,133 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+/**
+ * The master permission list. `php spark db:seed InitialSeeder` inserts exactly
+ * these rows into the `permissions` table, and the role screen reads them back
+ * to draw its tick boxes. A permission slug is always `module:action`.
+ */
+final class Permissions
+{
+    public const ROLE_SUPER_ADMIN = 'SUPER_ADMIN';
+    public const ROLE_ADMIN       = 'ADMIN';
+    public const ROLE_SALES_PERSON = 'SALES_PERSON';
+
+    /** @var list<array{name: string, description: string}> */
+    public const SYSTEM_ROLES = [
+        ['name' => self::ROLE_SUPER_ADMIN, 'description' => 'Full access to everything, including roles and permissions'],
+        ['name' => self::ROLE_ADMIN, 'description' => 'Manages masters, products and imports'],
+        ['name' => self::ROLE_SALES_PERSON, 'description' => 'Read-only access to masters and products'],
+    ];
+
+    /** @var array<string, list<string>> */
+    public const MODULE_ACTIONS = [
+        'users'        => ['view', 'create', 'edit', 'delete'],
+        'roles'        => ['view', 'create', 'edit', 'delete', 'assign'],
+        'regions'      => ['view', 'create', 'edit', 'delete'],
+        'distributors' => ['view', 'create', 'edit', 'delete'],
+        'brands'       => ['view', 'create', 'edit', 'delete'],
+        'products'     => ['view', 'create', 'edit', 'delete', 'import'],
+        'product_mrp'  => ['view', 'create', 'import'],
+        'imports'      => ['view'],
+    ];
+
+    /** @var array<string, string> */
+    private const ACTION_LABELS = [
+        'view'   => 'View',
+        'create' => 'Create',
+        'edit'   => 'Edit',
+        'delete' => 'Delete',
+        'assign' => 'Assign',
+        'import' => 'Import',
+    ];
+
+    /** @var array<string, string> */
+    private const MODULE_LABELS = [
+        'users'        => 'Users',
+        'roles'        => 'Roles & Permissions',
+        'regions'      => 'Regions',
+        'distributors' => 'Distributors',
+        'brands'       => 'Brands',
+        'products'     => 'Products',
+        'product_mrp'  => 'Product MRP',
+        'imports'      => 'CSV Imports',
+    ];
+
+    /**
+     * Every permission as it is stored: slug, module, action, display name.
+     *
+     * @return list<array{slug: string, module: string, action: string, name: string}>
+     */
+    public static function all(): array
+    {
+        $permissions = [];
+
+        foreach (self::MODULE_ACTIONS as $module => $actions) {
+            foreach ($actions as $action) {
+                $permissions[] = [
+                    'slug'   => "{$module}:{$action}",
+                    'module' => $module,
+                    'action' => $action,
+                    'name'   => self::ACTION_LABELS[$action] . ' ' . self::MODULE_LABELS[$module],
+                ];
+            }
+        }
+
+        return $permissions;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function slugs(): array
+    {
+        return array_map(static fn (array $p): string => $p['slug'], self::all());
+    }
+
+    /**
+     * Starting access for the three built-in roles, straight out of the
+     * "Default Access For Each Role" table in the schema document. This is only
+     * the seed state - it can be changed from the admin screen afterwards.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function defaultRolePermissions(): array
+    {
+        return [
+            self::ROLE_SUPER_ADMIN => self::slugs(),
+
+            self::ROLE_ADMIN => array_merge(
+                ['users:view', 'users:create', 'users:edit'],
+                self::expand('regions'),
+                self::expand('distributors'),
+                self::expand('brands'),
+                self::expand('products'),
+                self::expand('product_mrp'),
+                self::expand('imports'),
+            ),
+
+            self::ROLE_SALES_PERSON => [
+                'regions:view',
+                'distributors:view',
+                'brands:view',
+                'products:view',
+                'product_mrp:view',
+                'imports:view',
+            ],
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function expand(string $module): array
+    {
+        return array_map(
+            static fn (string $action): string => "{$module}:{$action}",
+            self::MODULE_ACTIONS[$module] ?? [],
+        );
+    }
+}

@@ -7,7 +7,7 @@ namespace App\Support;
 /**
  * The master permission list. `php spark db:seed InitialSeeder` inserts exactly
  * these rows into the `permissions` table, and the role screen reads them back
- * to draw its tick boxes. A permission slug is always `module:action`.
+ * to draw its tick boxes. A permission slug is always `page_route:page_action`.
  */
 final class Permissions
 {
@@ -49,8 +49,8 @@ final class Permissions
      */
     public const SALES_ROLES = [self::ROLE_RSM, self::ROLE_SO, 'SALES_PERSON'];
 
-    /** @var array<string, list<string>> */
-    public const MODULE_ACTIONS = [
+    /** @var array<string, list<string>> page route => the actions available on it */
+    public const PAGE_ACTIONS = [
         'users'        => ['view', 'create', 'edit', 'delete'],
         'roles'        => ['view', 'create', 'edit', 'delete', 'assign'],
         'regions'      => ['view', 'create', 'edit', 'delete'],
@@ -73,7 +73,7 @@ final class Permissions
     ];
 
     /** @var array<string, string> */
-    private const MODULE_LABELS = [
+    private const PAGE_LABELS = [
         'users'        => 'Users',
         'roles'        => 'Roles & Permissions',
         'regions'      => 'Regions',
@@ -86,21 +86,21 @@ final class Permissions
     ];
 
     /**
-     * Every permission as it is stored: slug, module, action, display name.
+     * Every permission as it is stored: slug, page route, page action, display name.
      *
-     * @return list<array{slug: string, module: string, action: string, name: string}>
+     * @return list<array{slug: string, page_route: string, page_action: string, name: string}>
      */
     public static function all(): array
     {
         $permissions = [];
 
-        foreach (self::MODULE_ACTIONS as $module => $actions) {
+        foreach (self::PAGE_ACTIONS as $route => $actions) {
             foreach ($actions as $action) {
                 $permissions[] = [
-                    'slug'   => "{$module}:{$action}",
-                    'module' => $module,
-                    'action' => $action,
-                    'name'   => self::ACTION_LABELS[$action] . ' ' . self::MODULE_LABELS[$module],
+                    'slug'        => "{$route}:{$action}",
+                    'page_route'  => $route,
+                    'page_action' => $action,
+                    'name'        => self::ACTION_LABELS[$action] . ' ' . self::PAGE_LABELS[$route],
                 ];
             }
         }
@@ -183,11 +183,11 @@ final class Permissions
     /**
      * @return list<string>
      */
-    private static function expand(string $module): array
+    private static function expand(string $route): array
     {
         return array_map(
-            static fn (string $action): string => "{$module}:{$action}",
-            self::MODULE_ACTIONS[$module] ?? [],
+            static fn (string $action): string => "{$route}:{$action}",
+            self::PAGE_ACTIONS[$route] ?? [],
         );
     }
 }

@@ -37,7 +37,6 @@ $routes->group($apiPrefix, static function (RouteCollection $routes): void {
     // --- auth --------------------------------------------------------------
     $routes->group('auth', static function (RouteCollection $routes): void {
         $routes->post('login', 'Auth::login', ['filter' => 'throttle:auth']);
-        $routes->post('refresh', 'Auth::refresh', ['filter' => 'throttle:auth']);
         $routes->post('logout', 'Auth::logout', ['filter' => 'auth']);
         $routes->get('me', 'Auth::me', ['filter' => 'auth']);
         $routes->post('change-password', 'Auth::changePassword', ['filter' => 'auth']);

@@ -128,14 +128,12 @@ return [
             `{ success: false, message, errors? }`, where `errors` is a list of
             `{ field, message }`.
 
-            **Auth.** `POST /auth/login` returns an access token (short-lived,
-            sent as `Authorization: Bearer <token>`) and a refresh token. The
-            access token carries the role's permissions, so a role change takes
-            effect on the next `POST /auth/refresh`. Refresh tokens rotate: the
-            one you present is burned as soon as a new pair is issued.
+            **Auth.** `POST /auth/login` returns an access token, sent as
+            `Authorization: Bearer <token>`. It is valid for 24 hours and there
+            is no refresh token - once it expires the user signs in again.
 
-            **Permissions.** Each endpoint below names the `module:action` slug it
-            requires. `SUPER_ADMIN` passes every check.
+            **Permissions.** Each endpoint below names the `page_route:page_action`
+            slug it requires. `SUPER_ADMIN` passes every check.
 
             **Deletes are soft.** `DELETE` flips `status` to `inactive` and
             returns the row; nothing is removed, so old records keep resolving
@@ -147,7 +145,7 @@ return [
     ],
     'tags' => [
         ['name' => 'Health', 'description' => 'Service probe'],
-        ['name' => 'Auth', 'description' => 'Login, token refresh, profile, password'],
+        ['name' => 'Auth', 'description' => 'Login, profile, password'],
         ['name' => 'Users', 'description' => 'User accounts'],
         ['name' => 'Roles', 'description' => 'Roles and their permission sets'],
         ['name' => 'Permissions', 'description' => 'The permission master list'],
@@ -185,8 +183,8 @@ return [
         '/auth/login' => [
             'post' => [
                 'tags'        => ['Auth'],
-                'summary'     => 'Exchange credentials for a token pair',
-                'description' => 'Rate limited. A wrong password and an unknown email return the same message on purpose.',
+                'summary'     => 'Exchange credentials for an access token',
+                'description' => 'Rate limited. A wrong password and an unknown email return the same message on purpose. The token is valid for 24 hours.',
                 'security'    => [],
                 'requestBody' => $jsonBody([
                     'type'     => 'object',
@@ -205,34 +203,11 @@ return [
                 ],
             ],
         ],
-        '/auth/refresh' => [
-            'post' => [
-                'tags'        => ['Auth'],
-                'summary'     => 'Swap a refresh token for a new pair',
-                'description' => 'The presented refresh token is revoked as the new pair is issued, so it is usable at most once.',
-                'security'    => [],
-                'requestBody' => $jsonBody([
-                    'type'       => 'object',
-                    'required'   => ['refresh_token'],
-                    'properties' => ['refresh_token' => ['type' => 'string']],
-                ]),
-                'responses' => [
-                    '200' => $okResponse('A fresh token pair.', $ref('AuthResult')),
-                    '401' => ['$ref' => '#/components/responses/Unauthorized'],
-                    '422' => ['$ref' => '#/components/responses/Unprocessable'],
-                    '429' => ['$ref' => '#/components/responses/TooManyRequests'],
-                ],
-            ],
-        ],
         '/auth/logout' => [
             'post' => [
                 'tags'        => ['Auth'],
                 'summary'     => 'End a session',
-                'description' => 'With `refresh_token` in the body only that session ends; without it, every session for the caller ends.',
-                'requestBody' => $jsonBody([
-                    'type'       => 'object',
-                    'properties' => ['refresh_token' => ['type' => 'string']],
-                ], false),
+                'description' => 'There is no server-side session to revoke - the client discards its access token. This endpoint exists for API completeness.',
                 'responses' => [
                     '200' => $okResponse('Signed out.', ['type' => 'null']),
                     '401' => ['$ref' => '#/components/responses/Unauthorized'],
@@ -253,7 +228,7 @@ return [
             'post' => [
                 'tags'        => ['Auth'],
                 'summary'     => 'Change your own password',
-                'description' => 'Every other session is ended, so other devices must sign in again.',
+                'description' => 'Access tokens already issued stay valid until they expire (up to 24 hours) - there is no server-side revocation.',
                 'requestBody' => $jsonBody([
                     'type'     => 'object',
                     'required' => ['old_password', 'new_password'],
@@ -303,7 +278,7 @@ return [
             'put' => [
                 'tags'        => ['Users'],
                 'summary'     => 'Update a user',
-                'description' => "Requires `users:edit`. Send only the fields you are changing.\n\nChanging the role or deactivating the account ends that user's sessions. The last active Super Admin cannot be moved or deactivated.\n\n"
+                'description' => "Requires `users:edit`. Send only the fields you are changing.\n\nChanging the role or deactivating the account takes effect the next time that user's access token is issued - there is no server-side revocation, so an already-issued token stays valid until it expires (up to 24 hours). The last active Super Admin cannot be moved or deactivated.\n\n"
                     . $roleScopeNote
                     . "\n\nMoving a user onto a role that reaches less far clears whatever no longer applies: an RSM moved to ADMIN loses its region, an SO moved to RSM its state.",
                 'requestBody' => $jsonBody($ref('UserUpdate')),
@@ -312,7 +287,7 @@ return [
             'delete' => [
                 'tags'        => ['Users'],
                 'summary'     => 'Deactivate a user (soft delete)',
-                'description' => 'Requires `users:delete`. Flips status to inactive and ends every session that user holds.',
+                'description' => 'Requires `users:delete`. Flips status to inactive. There is no server-side session revocation, so an access token already issued to that user stays valid until it expires (up to 24 hours).',
                 'responses'   => ['200' => $okResponse('User deactivated.', $ref('User'))] + $errorResponses,
             ],
         ],
@@ -330,7 +305,7 @@ return [
             'patch'      => [
                 'tags'        => ['Users'],
                 'summary'     => 'Set a new password for a user',
-                'description' => 'Requires `users:edit`. Ends every session that user holds.',
+                'description' => 'Requires `users:edit`. There is no server-side session revocation, so an access token already issued to that user stays valid until it expires (up to 24 hours).',
                 'requestBody' => $jsonBody([
                     'type'       => 'object',
                     'required'   => ['new_password'],
@@ -398,7 +373,7 @@ return [
         '/permissions' => [
             'get' => [
                 'tags'        => ['Permissions'],
-                'summary'     => 'The permission master list, grouped by module',
+                'summary'     => 'The permission master list, grouped by page route',
                 'description' => 'Requires `roles:view`. This is the shape the role screen needs to draw its tick boxes.',
                 'responses'   => ['200' => $okResponse('Grouped permissions.', $ref('PermissionGroups'))] + $errorResponses,
             ],
@@ -869,12 +844,29 @@ return [
                 ],
             ],
 
+            'PermissionSummary' => [
+                'type'        => 'object',
+                'description' => 'A role\'s permissions broken into the page routes it can reach and, per route, which actions it may perform there.',
+                'properties'  => [
+                    'page_routes'  => ['type' => 'array', 'items' => ['type' => 'string'], 'example' => ['products', 'product_mrp']],
+                    'page_actions' => [
+                        'type'  => 'array',
+                        'items' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'route'       => ['type' => 'string', 'example' => 'products'],
+                                'permissions' => ['type' => 'array', 'items' => ['type' => 'string'], 'example' => ['view', 'create']],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+
             'AuthResult' => [
                 'type'       => 'object',
                 'properties' => [
-                    'access_token'  => ['type' => 'string'],
-                    'refresh_token' => ['type' => 'string'],
-                    'user'          => [
+                    'access_token' => ['type' => 'string'],
+                    'user'         => [
                         'type'       => 'object',
                         'properties' => [
                             'id'          => ['type' => 'integer'],
@@ -882,7 +874,7 @@ return [
                             'email'       => ['type' => 'string', 'format' => 'email'],
                             'role'        => ['type' => 'string', 'example' => 'SUPER_ADMIN'],
                             'role_id'     => ['type' => 'integer'],
-                            'permissions' => ['type' => 'array', 'items' => ['type' => 'string'], 'example' => ['products:view', 'products:create']],
+                            'permissions' => $ref('PermissionSummary'),
                         ],
                     ],
                 ],
@@ -893,7 +885,7 @@ return [
                     $ref('User'),
                     [
                         'type'       => 'object',
-                        'properties' => ['permissions' => ['type' => 'array', 'items' => ['type' => 'string']]],
+                        'properties' => ['permissions' => $ref('PermissionSummary')],
                     ],
                 ],
             ],
@@ -976,24 +968,24 @@ return [
             'Permission' => [
                 'type'       => 'object',
                 'properties' => [
-                    'id'     => ['type' => 'integer'],
-                    'slug'   => ['type' => 'string', 'example' => 'products:view'],
-                    'module' => ['type' => 'string', 'example' => 'products'],
-                    'action' => ['type' => 'string', 'example' => 'view'],
-                    'name'   => ['type' => 'string', 'example' => 'View Products'],
+                    'id'          => ['type' => 'integer'],
+                    'slug'        => ['type' => 'string', 'example' => 'products:view'],
+                    'page_route'  => ['type' => 'string', 'example' => 'products'],
+                    'page_action' => ['type' => 'string', 'example' => 'view'],
+                    'name'        => ['type' => 'string', 'example' => 'View Products'],
                 ],
             ],
 
             'PermissionGroups' => [
                 'type'       => 'object',
                 'properties' => [
-                    'total'   => ['type' => 'integer'],
-                    'modules' => [
+                    'total'       => ['type' => 'integer'],
+                    'page_routes' => [
                         'type'  => 'array',
                         'items' => [
                             'type'       => 'object',
                             'properties' => [
-                                'module'      => ['type' => 'string'],
+                                'route'       => ['type' => 'string'],
                                 'permissions' => ['type' => 'array', 'items' => $ref('Permission')],
                             ],
                         ],

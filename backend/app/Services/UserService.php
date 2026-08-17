@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\ApiException;
-use App\Models\RefreshTokenModel;
 use App\Models\RegionModel;
 use App\Models\RoleModel;
 use App\Models\StateModel;
@@ -21,7 +20,6 @@ class UserService
     private RoleModel $roles;
     private RegionModel $regions;
     private StateModel $states;
-    private RefreshTokenModel $tokens;
 
     public function __construct()
     {
@@ -29,7 +27,6 @@ class UserService
         $this->roles   = model(RoleModel::class);
         $this->regions = model(RegionModel::class);
         $this->states  = model(StateModel::class);
-        $this->tokens  = model(RefreshTokenModel::class);
     }
 
     /**
@@ -212,10 +209,9 @@ class UserService
             $this->users->update($id, $changes);
         }
 
-        // Role or status changed - existing sessions must not keep the old access.
-        if ($roleChanged || $deactivating) {
-            $this->tokens->revokeAllForUser($id, $actorId);
-        }
+        // There is no server-side session to revoke - a role or status change
+        // takes effect the next time this user's access token is issued (on
+        // their next login, or within 24 hours as the current one expires).
 
         return $this->get($id);
     }
@@ -245,7 +241,6 @@ class UserService
         $this->guardLastActiveSuperAdmin($user);
 
         $this->users->update($id, ['status' => 'inactive', 'updated_by' => $actorId]);
-        $this->tokens->revokeAllForUser($id, $actorId);
 
         return $this->get($id);
     }
@@ -281,8 +276,6 @@ class UserService
             'password_hash' => AuthService::hashPassword($newPassword),
             'updated_by'    => $actorId,
         ]);
-
-        $this->tokens->revokeAllForUser($id, $actorId);
     }
 
     // -----------------------------------------------------------------------

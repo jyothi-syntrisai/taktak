@@ -10,8 +10,8 @@ use CodeIgniter\HTTP\ResponseInterface;
 class Permissions extends BaseApiController
 {
     /**
-     * The whole permission master list, grouped by module - exactly the shape
-     * the role screen needs to draw its tick boxes.
+     * The whole permission master list, grouped by page route - exactly the
+     * shape the role screen needs to draw its tick boxes.
      */
     public function index(): ResponseInterface
     {

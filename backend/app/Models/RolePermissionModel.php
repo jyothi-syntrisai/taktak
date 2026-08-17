@@ -22,10 +22,10 @@ class RolePermissionModel extends BaseModel
     public function permissionsForRole(int $roleId, bool $activeOnly = true): array
     {
         $builder = $this->db->table('role_permissions rp')
-            ->select('p.id, p.slug, p.module, p.action, p.name')
+            ->select('p.id, p.slug, p.page_route, p.page_action, p.name')
             ->join('permissions p', 'p.id = rp.permission_id')
             ->where('rp.role_id', $roleId)
-            ->orderBy('p.module', 'ASC')
+            ->orderBy('p.page_route', 'ASC')
             ->orderBy('p.id', 'ASC');
 
         if ($activeOnly) {

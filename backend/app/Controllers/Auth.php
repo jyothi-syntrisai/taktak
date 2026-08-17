@@ -33,31 +33,14 @@ class Auth extends BaseApiController
         $result = $this->service->login(
             strtolower((string) $input['email']),
             (string) $input['password'],
-            $this->sessionContext(),
         );
 
         return $this->ok($result, 'Logged in successfully');
     }
 
-    public function refresh(): ResponseInterface
-    {
-        $input = $this->validateBody(
-            ['refresh_token' => ['required', 'min_length[10]']],
-            ['refresh_token' => ['required' => 'refresh_token is required', 'min_length' => 'refresh_token is required']],
-        );
-
-        return $this->ok(
-            $this->service->refresh((string) $input['refresh_token'], $this->sessionContext()),
-            'Token refreshed',
-        );
-    }
-
-    /** With a refresh_token in the body: end that session. Without: end all of them. */
     public function logout(): ResponseInterface
     {
-        $token = $this->body()['refresh_token'] ?? null;
-
-        $this->service->logout(is_string($token) ? $token : null, $this->actorId());
+        $this->service->logout($this->actorId());
 
         return $this->noContentOk('Logged out successfully');
     }
@@ -96,19 +79,6 @@ class Auth extends BaseApiController
             (string) $input['new_password'],
         );
 
-        return $this->noContentOk('Password changed. Please log in again on your other devices.');
-    }
-
-    /**
-     * @return array{user_agent: string|null, ip_address: string|null}
-     */
-    private function sessionContext(): array
-    {
-        $userAgent = $this->request->getHeaderLine('User-Agent');
-
-        return [
-            'user_agent' => $userAgent === '' ? null : $userAgent,
-            'ip_address' => $this->request->getIPAddress() ?: null,
-        ];
+        return $this->noContentOk('Password changed.');
     }
 }

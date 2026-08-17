@@ -13,11 +13,12 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * Issues and verifies the two token types.
+ * Issues and verifies the access token.
  *
- * The access token carries the flattened permission list resolved at login, so
- * a per-request permission check never hits the database. The refresh token
- * carries nothing but an id and a one-time `jti`.
+ * The token carries the flattened permission list resolved at login, so a
+ * per-request permission check never hits the database. It is valid for 24
+ * hours and there is no server-side revocation - signing out is purely a
+ * client-side action of discarding the token.
  */
 class JwtService
 {
@@ -39,33 +40,11 @@ class JwtService
     }
 
     /**
-     * @param array{sub: string, jti: string} $payload
-     */
-    public function signRefreshToken(array $payload): string
-    {
-        return $this->sign($payload, $this->config->jwtRefreshSecret, $this->config->jwtRefreshTtl);
-    }
-
-    /**
      * @return array<string, mixed>
      */
     public function verifyAccessToken(string $token): array
     {
         return $this->verify($token, $this->config->jwtAccessSecret, 'Access token');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function verifyRefreshToken(string $token): array
-    {
-        return $this->verify($token, $this->config->jwtRefreshSecret, 'Refresh token');
-    }
-
-    /** Refresh tokens are stored hashed so a database leak cannot be replayed. */
-    public function hashToken(string $token): string
-    {
-        return hash('sha256', $token);
     }
 
     /**
@@ -86,11 +65,6 @@ class JwtService
             'd'     => $amount * 86400,
             default => $amount,
         };
-    }
-
-    public function refreshTtlSeconds(): int
-    {
-        return $this->ttlToSeconds($this->config->jwtRefreshTtl);
     }
 
     /**

@@ -29,7 +29,7 @@ class Services extends BaseService
     }
 
     /**
-     * Signing and verification of access / refresh tokens.
+     * Signing and verification of the access token.
      */
     public static function jwt(bool $getShared = true): JwtService
     {

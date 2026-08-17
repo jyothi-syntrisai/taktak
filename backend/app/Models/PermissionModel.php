@@ -9,8 +9,8 @@ class PermissionModel extends BaseModel
     protected $table         = 'permissions';
     protected $allowedFields = [
         'slug',
-        'module',
-        'action',
+        'page_route',
+        'page_action',
         'name',
         'status',
         'created_by',
@@ -24,9 +24,9 @@ class PermissionModel extends BaseModel
      */
     public function activeList(): array
     {
-        return $this->select('id, slug, module, action, name')
+        return $this->select('id, slug, page_route, page_action, name')
             ->where('status', 'active')
-            ->orderBy('module', 'ASC')
+            ->orderBy('page_route', 'ASC')
             ->orderBy('id', 'ASC')
             ->findAll();
     }

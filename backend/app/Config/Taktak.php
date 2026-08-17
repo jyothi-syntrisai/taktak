@@ -22,11 +22,12 @@ class Taktak extends BaseConfig
     // --- JWT ---------------------------------------------------------------
 
     public string $jwtAccessSecret = 'change-me-access-secret-at-least-32-chars';
-    public string $jwtRefreshSecret = 'change-me-refresh-secret-at-least-32-chars';
 
-    /** Duration strings: 30s, 15m, 12h, 7d. */
-    public string $jwtAccessTtl  = '15m';
-    public string $jwtRefreshTtl = '7d';
+    /**
+     * Duration strings: 30s, 15m, 12h, 7d. There is no refresh token, so this
+     * is how long a login session lasts before the user must sign in again.
+     */
+    public string $jwtAccessTtl = '24h';
 
     // --- First-run super admin (used by the seeder only) -------------------
 

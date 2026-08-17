@@ -10,7 +10,7 @@ use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
- * Gates a route on one or more `module:action` permissions.
+ * Gates a route on one or more `page_route:page_action` permissions.
  *
  * Filter arguments are comma separated and a colon already separates the alias
  * from its arguments, so a route writes the slug with a comma:
@@ -18,8 +18,8 @@ use CodeIgniter\HTTP\ResponseInterface;
  *     ['filter' => 'permission:users,view']   ->   users:view
  *
  * Permissions belong to the role, not the user - the access token carries the
- * flattened list resolved at login, so a role change takes effect on the next
- * token refresh.
+ * flattened list resolved at login, so a role change takes effect the next
+ * time the user signs in.
  */
 class PermissionFilter implements FilterInterface
 {
